@@ -198,7 +198,7 @@ def train_model():
     training_paths = [os.path.join(training_parent_dir, path) for path in paths]
     validation_paths = [os.path.join(validation_parent_dir, path) for path in paths]
 
-    angles = [0, 0, 0.02, 0.02, 0.1, 0.1]
+    angles = [0, 0, 0.1, 0.1, 0.5, 0.5]
 
     trainig_data_generator = get_multiple_datasets_generator(training_paths, angles, batch_size=128)
     validation_data_generator = get_multiple_datasets_generator(validation_paths, angles, batch_size=128)
@@ -212,7 +212,7 @@ def train_model():
     callbacks = [keras.callbacks.ModelCheckpoint(filepath="./model.h5", verbose=1, save_best_only=True)]
 
     model = get_model(image_size=(160, 320, 3))
-    # model.load_weights("./model.h5")
+    model.load_weights("./model.h5")
 
     model.fit_generator(trainig_data_generator, samples_per_epoch=training_samples_count, nb_epoch=10,
                         validation_data=validation_data_generator, nb_val_samples=validation_samples_count,
