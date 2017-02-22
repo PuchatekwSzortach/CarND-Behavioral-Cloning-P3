@@ -7,10 +7,9 @@ import csv
 import random
 import itertools
 
-import keras
 import numpy as np
-import tensorflow as tf
 import cv2
+import keras
 
 
 def get_preprocessing_pipeline(x):
@@ -19,8 +18,13 @@ def get_preprocessing_pipeline(x):
     """
 
     x = keras.layers.Cropping2D(cropping=((50, 20), (0, 0)))(x)
-    x = keras.layers.Lambda(lambda data: tf.image.resize_images(data, size=(45, 160)))(x)
+
+    # Poor man's resize, since using
+    # x = keras.layers.Lambda(lambda data: tf.image.resize_images(data, size=(45, 160)))(x)
+    # fails on model load...
+    x = keras.layers.AveragePooling2D(pool_size=(2, 2))(x)
     x = keras.layers.Lambda(lambda data: data / 255)(x)
+
     return x
 
 
@@ -47,16 +51,19 @@ def get_prediction_pipeline(x):
     x = keras.layers.Convolution2D(nb_filter=64, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.Convolution2D(nb_filter=128, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+    x = keras.layers.Dropout(p=0.5)(x)
 
     x = keras.layers.BatchNormalization()(x)
     x = keras.layers.Convolution2D(nb_filter=64, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.Convolution2D(nb_filter=128, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+    x = keras.layers.Dropout(p=0.5)(x)
 
     x = keras.layers.BatchNormalization()(x)
     x = keras.layers.Convolution2D(nb_filter=64, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.Convolution2D(nb_filter=128, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+    x = keras.layers.Dropout(p=0.5)(x)
 
     x = keras.layers.Flatten()(x)
     x = keras.layers.Dense(output_dim=1)(x)
@@ -205,6 +212,8 @@ def train_model():
     callbacks = [keras.callbacks.ModelCheckpoint(filepath="./model.h5", verbose=1, save_best_only=True)]
 
     model = get_model(image_size=(160, 320, 3))
+    # model.load_weights("./model.h5")
+
     model.fit_generator(trainig_data_generator, samples_per_epoch=training_samples_count, nb_epoch=10,
                         validation_data=validation_data_generator, nb_val_samples=validation_samples_count,
                         callbacks=callbacks)
