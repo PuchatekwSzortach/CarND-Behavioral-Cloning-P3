@@ -33,7 +33,7 @@ def get_logger(path):
 def log_single_generator_output(logger):
 
     generator = model.get_single_dataset_generator(
-        "../../data/behavioral_cloning/track_2_curves/driving_log.csv", minimum_angle=0.02)
+        "../../data/behavioral_cloning/validation/track_2_curves/driving_log.csv", minimum_angle=0.02)
 
     for _ in range(10):
 
@@ -43,7 +43,7 @@ def log_single_generator_output(logger):
 
 def log_all_datasets_generator_output(logger):
 
-    parent_dir = "../../data/behavioral_cloning/"
+    parent_dir = "../../data/behavioral_cloning/validation"
 
     paths = [
         "track_1_center/driving_log.csv",
@@ -72,7 +72,7 @@ def log_all_datasets_generator_output(logger):
 
 def log_preprocessed_datasets_generator_output(logger):
 
-    parent_dir = "../../data/behavioral_cloning/"
+    parent_dir = "../../data/behavioral_cloning/validation/"
 
     paths = [
         "track_1_center/driving_log.csv",
@@ -107,7 +107,6 @@ def main():
     # log_single_generator_output(logger)
     # log_all_datasets_generator_output(logger)
     log_preprocessed_datasets_generator_output(logger)
-
 
 
 if __name__ == "__main__":

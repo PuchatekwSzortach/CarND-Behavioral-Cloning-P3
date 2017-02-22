@@ -64,9 +64,7 @@ def get_prediction_pipeline(x):
     return x
 
 
-def get_model(image_size, save_path):
-
-    callbacks = [keras.callbacks.ModelCheckpoint(filepath=save_path, verbose=1, save_best_only=True)]
+def get_model(image_size):
 
     expected_image_size = (160, 320, 3)
 
@@ -78,7 +76,7 @@ def get_model(image_size, save_path):
     x = get_prediction_pipeline(x)
 
     model = keras.models.Model(input=input, output=x)
-    model.compile(optimizer='adam', loss='mean_squared_error', callbacks=callbacks)
+    model.compile(optimizer='adam', loss='mean_squared_error')
     return model
 
 
@@ -111,16 +109,20 @@ def get_single_dataset_generator(csv_path, minimum_angle=0):
         reader = csv.reader(file)
         csv_lines = [line for line in reader if abs(float(line[3])) >= minimum_angle]
 
+    parent_dir = os.path.dirname(csv_path)
+
     while True:
 
         random.shuffle(csv_lines)
 
         for line in csv_lines:
 
-            center_image = line[0]
+            # A bit of acrobatics with paths so that we can run generator on AWS (csv_path uses absolute paths)
+            path = parent_dir + "/IMG" + line[0].split("IMG")[1]
+
             steering_angle = float(line[3])
 
-            image = cv2.imread(center_image)
+            image = cv2.imread(path)
 
             # Flip randomly
             if random.randint(0, 1) == 1:
@@ -174,7 +176,8 @@ def get_multiple_datasets_generator(paths, minimum_angles, batch_size):
 
 def train_model():
 
-    parent_dir = "../../data/behavioral_cloning/"
+    training_parent_dir = "../../data/behavioral_cloning/training/"
+    validation_parent_dir = "../../data/behavioral_cloning/validation/"
 
     paths = [
         "track_1_center/driving_log.csv",
@@ -185,15 +188,26 @@ def train_model():
         "track_2_recovery/driving_log.csv"
     ]
 
-    paths = [os.path.join(parent_dir, path) for path in paths]
+    training_paths = [os.path.join(training_parent_dir, path) for path in paths]
+    validation_paths = [os.path.join(validation_parent_dir, path) for path in paths]
+
     angles = [0, 0, 0.02, 0.02, 0.1, 0.1]
 
-    generator = get_multiple_datasets_generator(paths, angles, batch_size=32)
+    trainig_data_generator = get_multiple_datasets_generator(training_paths, angles, batch_size=128)
+    validation_data_generator = get_multiple_datasets_generator(validation_paths, angles, batch_size=128)
 
-    samples_count = sum([get_dataset_samples_count(path, minimum_angle) for path, minimum_angle in zip(paths, angles)])
+    training_samples_count = sum(
+        [get_dataset_samples_count(path, minimum_angle) for path, minimum_angle in zip(training_paths, angles)])
 
-    model = get_model(image_size=(160, 320, 3), save_path="./model.h5")
-    model.fit_generator(generator, samples_per_epoch=samples_count, nb_epoch=10)
+    validation_samples_count = sum(
+        [get_dataset_samples_count(path, minimum_angle) for path, minimum_angle in zip(validation_paths, angles)])
+
+    callbacks = [keras.callbacks.ModelCheckpoint(filepath="./model.h5", verbose=1, save_best_only=True)]
+
+    model = get_model(image_size=(160, 320, 3))
+    model.fit_generator(trainig_data_generator, samples_per_epoch=training_samples_count, nb_epoch=10,
+                        validation_data=validation_data_generator, nb_val_samples=validation_samples_count,
+                        callbacks=callbacks)
 
 
 if __name__ == "__main__":
