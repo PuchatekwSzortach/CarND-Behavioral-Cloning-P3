@@ -23,9 +23,12 @@ def main():
     video_file = args.image_folder + '.mp4'
     print("Creating video {}, FPS={}".format(video_file, args.fps))
 
-    video_processor = model.VideoProcessor()
+    clip = ImageSequenceClip(args.image_folder, fps=args.fps)
 
-    clip = ImageSequenceClip(args.image_folder, fps=args.fps).fl_image(video_processor.process_frame)
+    # Show preprocessing effects
+    video_processor = model.VideoProcessor()
+    clip = clip.fl_image(video_processor.process_frame)
+
     clip.write_videofile(video_file)
 
 
