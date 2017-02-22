@@ -4,10 +4,12 @@ Module with preprocessing, prediction model and training code
 
 import os
 import csv
+import random
 
 import keras
 import numpy as np
 import tensorflow as tf
+import cv2
 
 
 def get_preprocessing_pipeline(x):
@@ -67,20 +69,29 @@ class VideoProcessor:
         return 255 * processed_frame
 
 
-def get_single_dataset_generator(csv_path):
-
-    csv_lines = []
+def get_single_dataset_generator(csv_path, minimum_angle=0):
 
     with open(csv_path) as file:
 
         reader = csv.reader(file)
-
-        for line in reader:
-
-            csv_lines.append(line)
+        csv_lines = [line for line in reader if abs(float(line[3])) > minimum_angle]
 
     while True:
 
+        random.shuffle(csv_lines)
+
         for line in csv_lines:
 
-            yield(line)
+            center_image = line[0]
+            steering_angle = float(line[3])
+
+            image = cv2.imread(center_image)
+
+            # Flip randomly
+            if random.randint(0, 1) == 1:
+
+                image = cv2.flip(image, flipCode=1)
+                steering_angle *= -1
+
+            yield image, steering_angle
+

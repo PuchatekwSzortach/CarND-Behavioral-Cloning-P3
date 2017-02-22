@@ -32,11 +32,13 @@ def main():
 
     logger = get_logger("/tmp/behavioral_cloning.html")
 
-    generator = model.get_single_dataset_generator("../../data/behavioral_cloning/track_1_center/driving_log.csv")
+    # generator = model.get_single_dataset_generator("../../data/behavioral_cloning/track_1_center/driving_log.csv")
+    generator = model.get_single_dataset_generator("../../data/behavioral_cloning/track_1_curves/driving_log.csv", minimum_angle=0.02)
 
     for _ in range(10):
 
-        print(next(generator))
+        image, steering_angle = next(generator)
+        logger.info(vlogging.VisualRecord("Frame", image, "Steering angle: {}".format(steering_angle)))
 
 
 if __name__ == "__main__":
