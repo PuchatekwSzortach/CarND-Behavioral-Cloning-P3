@@ -6,6 +6,7 @@ import os
 import logging
 
 import vlogging
+import cv2
 
 import model
 
@@ -28,17 +29,51 @@ def get_logger(path):
     return logger
 
 
-def main():
+def log_single_generator_output(logger):
 
-    logger = get_logger("/tmp/behavioral_cloning.html")
-
-    # generator = model.get_single_dataset_generator("../../data/behavioral_cloning/track_1_center/driving_log.csv")
-    generator = model.get_single_dataset_generator("../../data/behavioral_cloning/track_1_curves/driving_log.csv", minimum_angle=0.02)
+    generator = model.get_single_dataset_generator(
+        "../../data/behavioral_cloning/track_2_curves/driving_log.csv", minimum_angle=0.02)
 
     for _ in range(10):
 
         image, steering_angle = next(generator)
         logger.info(vlogging.VisualRecord("Frame", image, "Steering angle: {}".format(steering_angle)))
+
+
+def log_all_datasets_generator_output(logger):
+
+    parent_dir = "../../data/behavioral_cloning/"
+
+    paths = [
+        "track_1_center/driving_log.csv",
+        "track_2_center/driving_log.csv",
+        "track_1_curves/driving_log.csv",
+        "track_2_curves/driving_log.csv",
+        "track_1_recovery/driving_log.csv",
+        "track_2_recovery/driving_log.csv"
+    ]
+
+    paths = [os.path.join(parent_dir, path) for path in paths]
+    angles = [0, 0, 0.02, 0.02, 0.1, 0.1]
+
+    generator = model.get_multiple_datasets_generator(paths, angles, batch_size=6)
+
+    for _ in range(10):
+
+        images, steering_angles = next(generator)
+
+        # Resize images slightly
+        images = [cv2.pyrDown(image) for image in images]
+
+        logger.info(vlogging.VisualRecord("Frame", images, "Steering angle: {}".format(steering_angles)))
+
+
+def main():
+
+    logger = get_logger("/tmp/behavioral_cloning.html")
+
+    # log_single_generator_output(logger)
+    log_all_datasets_generator_output(logger)
 
 
 if __name__ == "__main__":

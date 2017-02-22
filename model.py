@@ -5,6 +5,7 @@ Module with preprocessing, prediction model and training code
 import os
 import csv
 import random
+import itertools
 
 import keras
 import numpy as np
@@ -70,11 +71,18 @@ class VideoProcessor:
 
 
 def get_single_dataset_generator(csv_path, minimum_angle=0):
+    """
+    Return a generator that yields data from a single dataset. Single yield return a single (image, steering angle)
+    tuple. Image and steering angle are randomly flipped
+    :param csv_path: path to drive log
+    :param minimum_angle: minimum angle frame must have to be returned
+    :return: generator
+    """
 
     with open(csv_path) as file:
 
         reader = csv.reader(file)
-        csv_lines = [line for line in reader if abs(float(line[3])) > minimum_angle]
+        csv_lines = [line for line in reader if abs(float(line[3])) >= minimum_angle]
 
     while True:
 
@@ -94,4 +102,28 @@ def get_single_dataset_generator(csv_path, minimum_angle=0):
                 steering_angle *= -1
 
             yield image, steering_angle
+
+
+def get_multiple_datasets_generator(paths, minimum_angles, batch_size):
+
+    generators = [get_single_dataset_generator(path, minimum_angle)
+                  for path, minimum_angle in zip(paths, minimum_angles)]
+
+    generators_cycle = itertools.cycle(generators)
+
+    while True:
+
+        images = []
+        steering_angles = []
+
+        while len(images) < batch_size:
+
+            current_generator = next(generators_cycle)
+            image, angle = next(current_generator)
+
+            images.append(image)
+            steering_angles.append(angle)
+
+        yield images, steering_angles
+
 
