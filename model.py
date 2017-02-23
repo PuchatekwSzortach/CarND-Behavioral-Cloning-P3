@@ -11,6 +11,12 @@ import numpy as np
 import cv2
 import keras
 
+import matplotlib
+
+# Pyplot import fails with QXcbConnection otherwise...
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 
 def get_preprocessing_pipeline(x):
     """
@@ -104,7 +110,7 @@ class VideoProcessor:
 
 def get_single_dataset_generator(csv_path, minimum_angle=0):
     """
-    Return a generator that yields data from a single dataset. Single yield return a single (image, steering angle)
+    Return a generator that yields data from a single dataset. On yield return a single (image, steering angle)
     tuple. Image and steering angle are randomly flipped
     :param csv_path: path to drive log
     :param minimum_angle: minimum angle frame must have to be returned
@@ -141,6 +147,9 @@ def get_single_dataset_generator(csv_path, minimum_angle=0):
 
 
 def get_dataset_samples_count(csv_path, minimum_angle):
+    """
+    Returns count of samples in a dataset
+    """
 
     with open(csv_path) as file:
 
@@ -156,9 +165,10 @@ def get_multiple_datasets_generator(paths, minimum_angles, batch_size):
     :param paths: paths to drive log csv files
     :param minimum_angles: minimum angles frame from corresponding data set must have to be outputted
     :param batch_size: batch size
-    :return: generator that yields images, steering_angles batches.
+    :return: generator that yields (images, steering_angles) batches.
     """
 
+    # Get generator for each dataset
     generators = [get_single_dataset_generator(path, minimum_angle)
                   for path, minimum_angle in zip(paths, minimum_angles)]
 
@@ -198,9 +208,10 @@ def train_model():
     training_paths = [os.path.join(training_parent_dir, path) for path in paths]
     validation_paths = [os.path.join(validation_parent_dir, path) for path in paths]
 
-    angles = [0, 0, 0.1, 0.1, 0.5, 0.5]
+    # Roughly corresponds to 0deg, 5deg and 12.5deg minimum angles
+    angles = [0, 0, 0.2, 0.2, 0.5, 0.5]
 
-    trainig_data_generator = get_multiple_datasets_generator(training_paths, angles, batch_size=128)
+    training_data_generator = get_multiple_datasets_generator(training_paths, angles, batch_size=128)
     validation_data_generator = get_multiple_datasets_generator(validation_paths, angles, batch_size=128)
 
     training_samples_count = sum(
@@ -212,11 +223,21 @@ def train_model():
     callbacks = [keras.callbacks.ModelCheckpoint(filepath="./model.h5", verbose=1, save_best_only=True)]
 
     model = get_model(image_size=(160, 320, 3))
-    model.load_weights("./model.h5")
+    # model.load_weights("./model.h5")
 
-    model.fit_generator(trainig_data_generator, samples_per_epoch=training_samples_count, nb_epoch=10,
-                        validation_data=validation_data_generator, nb_val_samples=validation_samples_count,
-                        callbacks=callbacks)
+    history_object = model.fit_generator(
+        training_data_generator, samples_per_epoch=training_samples_count, nb_epoch=3,
+        validation_data=validation_data_generator, nb_val_samples=validation_samples_count,
+        callbacks=callbacks)
+
+    plt.plot(history_object.history['loss'])
+    plt.plot(history_object.history['val_loss'])
+    plt.title('model mean squared error loss')
+    plt.ylabel('mean squared error loss')
+    plt.xlabel('epoch')
+    plt.legend(['training set', 'validation set'], loc='upper right')
+
+    plt.savefig("./loss_plot.png")
 
 
 if __name__ == "__main__":
