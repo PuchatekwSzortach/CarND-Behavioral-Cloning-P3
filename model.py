@@ -47,25 +47,25 @@ def get_preprocessing_model(image_size):
 
 def get_prediction_pipeline(x):
 
-    x = keras.layers.BatchNormalization()(x)
     x = keras.layers.Convolution2D(nb_filter=64, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.Convolution2D(nb_filter=128, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
     x = keras.layers.Dropout(p=0.5)(x)
 
-    x = keras.layers.BatchNormalization()(x)
-    x = keras.layers.Convolution2D(nb_filter=64, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.Convolution2D(nb_filter=128, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
+    x = keras.layers.Convolution2D(nb_filter=256, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
     x = keras.layers.Dropout(p=0.5)(x)
 
-    x = keras.layers.BatchNormalization()(x)
-    x = keras.layers.Convolution2D(nb_filter=64, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.Convolution2D(nb_filter=128, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
+    x = keras.layers.Convolution2D(nb_filter=256, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
     x = keras.layers.Dropout(p=0.5)(x)
 
     x = keras.layers.Flatten()(x)
+    x = keras.layers.Dense(output_dim=1000, activation='elu')(x)
+    x = keras.layers.Dense(output_dim=250, activation='elu')(x)
+    x = keras.layers.Dropout(p=0.5)(x)
     x = keras.layers.Dense(output_dim=1)(x)
 
     return x
@@ -127,18 +127,18 @@ def get_paths_angles_tuples(csv_path, minimum_angle):
 
             path_angle_tuples.append((line[0], steering_angle))
 
-        # Left image - only use it if we are not steering fully to the left
-        # If we are, then maybe even with camera from left bumper we should steer fully to left
-        if steering_angle > -1 and abs(steering_angle) >= minimum_angle:
+        steering_offset = 0.1
 
-            modified_angle = np.clip(steering_angle + abs(0.2 * steering_angle), -1, 1)
+        # Left image - only use it if we are turning right now
+        if steering_angle > 0.1 and abs(steering_angle + steering_offset) >= minimum_angle:
+
+            modified_angle = np.clip(steering_angle + steering_offset, -1, 1)
             path_angle_tuples.append((line[1], modified_angle))
 
-        # # Right image - only use it if we are not steering fully to the right
-        # # If we are, then maybe even with camera from right bumper we should steer fully to right
-        if steering_angle > -1 and abs(steering_angle) >= minimum_angle:
+        # Right image - only use it if we are turning left now
+        if steering_angle < -0.1 and abs(steering_angle - steering_offset) >= minimum_angle:
 
-            modified_angle = np.clip(steering_angle - abs(0.2 * steering_angle), -1, 1)
+            modified_angle = np.clip(steering_angle - steering_offset, -1, 1)
             path_angle_tuples.append((line[1], modified_angle))
 
     return path_angle_tuples
@@ -219,14 +219,17 @@ def train_model():
         "track_1_curves/driving_log.csv",
         "track_2_curves/driving_log.csv",
         "track_1_recovery/driving_log.csv",
-        "track_2_recovery/driving_log.csv"
+        "track_2_recovery/driving_log.csv",
+        # Use recovery data more often than center and curves
+        "track_1_recovery/driving_log.csv",
+        "track_2_recovery/driving_log.csv",
     ]
 
     training_paths = [os.path.join(training_parent_dir, path) for path in paths]
     validation_paths = [os.path.join(validation_parent_dir, path) for path in paths]
 
-    # Roughly corresponds to 0deg, 5deg and 12.5deg minimum angles
-    angles = [0, 0, 0.2, 0.2, 0.5, 0.5]
+    # Roughly corresponds to 0deg, 5deg and 10deg and 20deg minimum angles
+    angles = [0, 0, 0.2, 0.2, 0.4, 0.4, 0.8, 0.8]
 
     training_data_generator = get_multiple_datasets_generator(training_paths, angles, batch_size=128)
     validation_data_generator = get_multiple_datasets_generator(validation_paths, angles, batch_size=128)
