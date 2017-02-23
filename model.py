@@ -11,12 +11,6 @@ import numpy as np
 import cv2
 import keras
 
-import matplotlib
-
-# Pyplot import fails with QXcbConnection otherwise...
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-
 
 def get_preprocessing_pipeline(x):
     """
@@ -108,7 +102,49 @@ class VideoProcessor:
         return 255 * processed_frame
 
 
-def get_single_dataset_generator(csv_path, minimum_angle=0):
+def get_paths_angles_tuples(csv_path, minimum_angle):
+    """
+    Returns a list of (path, steering angle) tuples. Only paths to frames for which
+     absolute angles are at least minimum_angle are returned.
+    :param csv_path:
+    :param minimum_angle:
+    :return: (path, angle) tuples list
+    """
+
+    with open(csv_path) as file:
+
+        reader = csv.reader(file)
+        csv_lines = [line for line in reader]
+
+    path_angle_tuples = []
+
+    for line in csv_lines:
+
+        steering_angle = float(line[3])
+
+        # # Center image
+        if abs(steering_angle) >= minimum_angle:
+
+            path_angle_tuples.append((line[0], steering_angle))
+
+        # Left image - only use it if we are not steering fully to the left
+        # If we are, then maybe even with camera from left bumper we should steer fully to left
+        if steering_angle > -1 and abs(steering_angle) >= minimum_angle:
+
+            modified_angle = np.clip(steering_angle + abs(0.2 * steering_angle), -1, 1)
+            path_angle_tuples.append((line[1], modified_angle))
+
+        # # Right image - only use it if we are not steering fully to the right
+        # # If we are, then maybe even with camera from right bumper we should steer fully to right
+        if steering_angle > -1 and abs(steering_angle) >= minimum_angle:
+
+            modified_angle = np.clip(steering_angle - abs(0.2 * steering_angle), -1, 1)
+            path_angle_tuples.append((line[1], modified_angle))
+
+    return path_angle_tuples
+
+
+def get_single_dataset_generator(csv_path, minimum_angle):
     """
     Return a generator that yields data from a single dataset. On yield return a single (image, steering angle)
     tuple. Image and steering angle are randomly flipped
@@ -117,25 +153,19 @@ def get_single_dataset_generator(csv_path, minimum_angle=0):
     :return: generator
     """
 
-    with open(csv_path) as file:
-
-        reader = csv.reader(file)
-        csv_lines = [line for line in reader if abs(float(line[3])) >= minimum_angle]
-
+    paths_angles_tuples = get_paths_angles_tuples(csv_path, minimum_angle)
     parent_dir = os.path.dirname(csv_path)
 
     while True:
 
-        random.shuffle(csv_lines)
+        random.shuffle(paths_angles_tuples)
 
-        for line in csv_lines:
+        for path, steering_angle in paths_angles_tuples:
 
             # A bit of acrobatics with paths so that we can run generator on AWS (csv_path uses absolute paths)
-            path = parent_dir + "/IMG" + line[0].split("IMG")[1]
+            relative_path = parent_dir + "/IMG" + path.split("IMG")[1]
 
-            steering_angle = float(line[3])
-
-            image = cv2.imread(path)
+            image = cv2.imread(relative_path)
 
             # Flip randomly
             if random.randint(0, 1) == 1:
@@ -144,19 +174,6 @@ def get_single_dataset_generator(csv_path, minimum_angle=0):
                 steering_angle *= -1
 
             yield image, steering_angle
-
-
-def get_dataset_samples_count(csv_path, minimum_angle):
-    """
-    Returns count of samples in a dataset
-    """
-
-    with open(csv_path) as file:
-
-        reader = csv.reader(file)
-        csv_lines = [line for line in reader if abs(float(line[3])) >= minimum_angle]
-
-    return len(csv_lines)
 
 
 def get_multiple_datasets_generator(paths, minimum_angles, batch_size):
@@ -215,10 +232,10 @@ def train_model():
     validation_data_generator = get_multiple_datasets_generator(validation_paths, angles, batch_size=128)
 
     training_samples_count = sum(
-        [get_dataset_samples_count(path, minimum_angle) for path, minimum_angle in zip(training_paths, angles)])
+        [len(get_paths_angles_tuples(path, minimum_angle)) for path, minimum_angle in zip(training_paths, angles)])
 
     validation_samples_count = sum(
-        [get_dataset_samples_count(path, minimum_angle) for path, minimum_angle in zip(validation_paths, angles)])
+        [len(get_paths_angles_tuples(path, minimum_angle)) for path, minimum_angle in zip(validation_paths, angles)])
 
     callbacks = [keras.callbacks.ModelCheckpoint(filepath="./model.h5", verbose=1, save_best_only=True)]
 
@@ -226,9 +243,15 @@ def train_model():
     # model.load_weights("./model.h5")
 
     history_object = model.fit_generator(
-        training_data_generator, samples_per_epoch=training_samples_count, nb_epoch=3,
+        training_data_generator, samples_per_epoch=training_samples_count, nb_epoch=10,
         validation_data=validation_data_generator, nb_val_samples=validation_samples_count,
         callbacks=callbacks)
+
+    import matplotlib
+
+    # Pyplot import fails with QXcbConnection otherwise...
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
 
     plt.plot(history_object.history['loss'])
     plt.plot(history_object.history['val_loss'])

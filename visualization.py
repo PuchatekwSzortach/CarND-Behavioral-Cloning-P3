@@ -105,8 +105,8 @@ def main():
     logger = get_logger("/tmp/behavioral_cloning.html")
 
     # log_single_generator_output(logger)
-    log_all_datasets_generator_output(logger)
-    # log_preprocessed_datasets_generator_output(logger)
+    # log_all_datasets_generator_output(logger)
+    log_preprocessed_datasets_generator_output(logger)
 
 
 if __name__ == "__main__":
