@@ -10,6 +10,7 @@ import itertools
 import numpy as np
 import cv2
 import keras
+import scipy.ndimage
 
 
 def get_preprocessing_pipeline(x):
@@ -47,24 +48,30 @@ def get_preprocessing_model(image_size):
 
 def get_prediction_pipeline(x):
 
+    x = keras.layers.BatchNormalization()(x)
+    x = keras.layers.Convolution2D(nb_filter=24, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
+    x = keras.layers.Convolution2D(nb_filter=36, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
+    x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+
+    x = keras.layers.BatchNormalization()(x)
+    x = keras.layers.Dropout(p=0.5)(x)
+    x = keras.layers.Convolution2D(nb_filter=36, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
+    x = keras.layers.Convolution2D(nb_filter=48, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
+    x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+
+    x = keras.layers.BatchNormalization()(x)
+    x = keras.layers.Dropout(p=0.5)(x)
+    x = keras.layers.Convolution2D(nb_filter=48, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.Convolution2D(nb_filter=64, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
-    x = keras.layers.Convolution2D(nb_filter=128, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
     x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
-    x = keras.layers.Dropout(p=0.5)(x)
 
-    x = keras.layers.Convolution2D(nb_filter=128, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
-    x = keras.layers.Convolution2D(nb_filter=256, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
-    x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+    x = keras.layers.BatchNormalization()(x)
     x = keras.layers.Dropout(p=0.5)(x)
-
-    x = keras.layers.Convolution2D(nb_filter=128, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
-    x = keras.layers.Convolution2D(nb_filter=256, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
-    x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
-    x = keras.layers.Dropout(p=0.5)(x)
-
     x = keras.layers.Flatten()(x)
     x = keras.layers.Dense(output_dim=1000, activation='elu')(x)
-    x = keras.layers.Dense(output_dim=250, activation='elu')(x)
+    x = keras.layers.Dense(output_dim=100, activation='elu')(x)
+    x = keras.layers.Dense(output_dim=50, activation='elu')(x)
+    x = keras.layers.BatchNormalization()(x)
     x = keras.layers.Dropout(p=0.5)(x)
     x = keras.layers.Dense(output_dim=1)(x)
 
@@ -127,7 +134,8 @@ def get_paths_angles_tuples(csv_path, minimum_angle):
 
             path_angle_tuples.append((line[0], steering_angle))
 
-        steering_offset = 0.1
+        # Add 2.5deg + up to additional 5deg if steering angle is large
+        steering_offset = 0.1 + (0.2 * np.abs(steering_angle))
 
         # Left image - only use it if we are turning right now
         if steering_angle > 0.1 and abs(steering_angle + steering_offset) >= minimum_angle:
@@ -142,6 +150,30 @@ def get_paths_angles_tuples(csv_path, minimum_angle):
             path_angle_tuples.append((line[1], modified_angle))
 
     return path_angle_tuples
+
+
+def get_shifted_image(image, max_shift):
+    """
+    Randomly shift image by up to max_shift pixels
+    """
+
+    vertical_shift = random.randint(-max_shift, max_shift)
+    horizontal_shift = random.randint(-max_shift, max_shift)
+
+    vertical_padding = (0, vertical_shift) if vertical_shift > 0 else (abs(vertical_shift), 0)
+    horizontal_padding = (0, horizontal_shift) if horizontal_shift > 0 else (abs(horizontal_shift), 0)
+
+    padding = (vertical_padding, horizontal_padding, (0, 0))
+
+    padded_image = np.pad(image, padding, mode='edge')
+
+    y_start = 0 if vertical_shift <= 0 else padded_image.shape[0] - image.shape[0]
+    y_end = y_start + image.shape[0]
+
+    x_start = 0 if horizontal_shift <= 0 else padded_image.shape[1] - image.shape[1]
+    x_end = x_start + image.shape[1]
+
+    return padded_image[y_start: y_end, x_start: x_end, :]
 
 
 def get_single_dataset_generator(csv_path, minimum_angle):
@@ -167,13 +199,22 @@ def get_single_dataset_generator(csv_path, minimum_angle):
 
             image = cv2.imread(relative_path)
 
+            # Rotate randomly about origin
+            image = scipy.ndimage.rotate(image, angle=random.randint(-5, 5), reshape=False, mode='nearest')
+
+            # Shift by a random amount
+            image = get_shifted_image(image, max_shift=5)
+
+            # Change brightness by a random amount
+            image = np.clip(image.astype(np.float32) * random.uniform(0.7, 1.3), 0, 255)
+
             # Flip randomly
             if random.randint(0, 1) == 1:
 
                 image = cv2.flip(image, flipCode=1)
                 steering_angle *= -1
 
-            yield image, steering_angle
+            yield image.astype(np.uint8), steering_angle
 
 
 def get_multiple_datasets_generator(paths, minimum_angles, batch_size):
@@ -210,8 +251,8 @@ def get_multiple_datasets_generator(paths, minimum_angles, batch_size):
 
 def train_model():
 
-    training_parent_dir = "../../data/behavioral_cloning/training/"
-    validation_parent_dir = "../../data/behavioral_cloning/validation/"
+    training_parent_dir = "../../data/behavioral_cloning/2017_02_27/training/"
+    validation_parent_dir = "../../data/behavioral_cloning/2017_02_27/validation/"
 
     paths = [
         "track_1_center/driving_log.csv",
@@ -220,19 +261,19 @@ def train_model():
         "track_2_curves/driving_log.csv",
         "track_1_recovery/driving_log.csv",
         "track_2_recovery/driving_log.csv",
-        # Use recovery data more often than center and curves
-        "track_1_recovery/driving_log.csv",
-        "track_2_recovery/driving_log.csv",
     ]
 
     training_paths = [os.path.join(training_parent_dir, path) for path in paths]
     validation_paths = [os.path.join(validation_parent_dir, path) for path in paths]
 
-    # Roughly corresponds to 0deg, 5deg and 10deg and 20deg minimum angles
-    angles = [0, 0, 0.2, 0.2, 0.4, 0.4, 0.8, 0.8]
+    # Roughly corresponds to 0deg, 1.25deg and 10deg
+    angles = [0, 0, 0.05, 0.05, 0.4, 0.4]
+    # angles = [0, 0.05, 0.4]
 
-    training_data_generator = get_multiple_datasets_generator(training_paths, angles, batch_size=128)
-    validation_data_generator = get_multiple_datasets_generator(validation_paths, angles, batch_size=128)
+    batch_size = 512
+
+    training_data_generator = get_multiple_datasets_generator(training_paths, angles, batch_size=batch_size)
+    validation_data_generator = get_multiple_datasets_generator(validation_paths, angles, batch_size=batch_size)
 
     training_samples_count = sum(
         [len(get_paths_angles_tuples(path, minimum_angle)) for path, minimum_angle in zip(training_paths, angles)])
@@ -246,7 +287,7 @@ def train_model():
     # model.load_weights("./model.h5")
 
     history_object = model.fit_generator(
-        training_data_generator, samples_per_epoch=training_samples_count, nb_epoch=10,
+        training_data_generator, samples_per_epoch=training_samples_count, nb_epoch=20,
         validation_data=validation_data_generator, nb_val_samples=validation_samples_count,
         callbacks=callbacks)
 
