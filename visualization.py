@@ -8,6 +8,8 @@ import logging
 import vlogging
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
+import tqdm
 
 import model
 
@@ -100,13 +102,48 @@ def log_preprocessed_datasets_generator_output(logger):
             "Frames", preprocessed_images, "Steering angle: {}".format(steering_angles.tolist())))
 
 
+def check_angles_distribution():
+
+    parent_dir = "../../data/behavioral_cloning/2017_02_27/training/"
+
+    paths = [
+        "track_1_center/driving_log.csv",
+        "track_2_center/driving_log.csv",
+        "track_1_curves/driving_log.csv",
+        "track_2_curves/driving_log.csv",
+        "track_1_recovery/driving_log.csv",
+        "track_2_recovery/driving_log.csv"
+    ]
+
+    paths = [os.path.join(parent_dir, path) for path in paths]
+    angles = [0, 0, 0.05, 0.05, 0.4, 0.4]
+    # angles = [0.0]
+
+    data_sets = [model.get_balanced_paths_angles_tuples(
+        csv_path=path, minimum_angle=angle) for path, angle in zip(paths, angles)]
+
+    steering_angles = []
+
+    for path, data_set in zip(paths, data_sets):
+
+        print("{}: {}".format(path, len(data_set)))
+
+        steering_angles.extend([angle for path, angle in data_set])
+
+    print(len(steering_angles))
+    plt.hist(steering_angles, bins=100)
+    plt.show()
+
+
 def main():
 
     logger = get_logger("/tmp/behavioral_cloning.html")
 
     # log_single_generator_output(logger)
     # log_all_datasets_generator_output(logger)
-    log_preprocessed_datasets_generator_output(logger)
+    # log_preprocessed_datasets_generator_output(logger)
+
+    check_angles_distribution()
 
 
 if __name__ == "__main__":

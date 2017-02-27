@@ -69,6 +69,8 @@ def get_prediction_pipeline(x):
     x = keras.layers.Dropout(p=0.5)(x)
     x = keras.layers.Flatten()(x)
     x = keras.layers.Dense(output_dim=1000, activation='elu')(x)
+    x = keras.layers.BatchNormalization()(x)
+    x = keras.layers.Dropout(p=0.5)(x)
     x = keras.layers.Dense(output_dim=100, activation='elu')(x)
     x = keras.layers.Dense(output_dim=50, activation='elu')(x)
     x = keras.layers.BatchNormalization()(x)
@@ -89,8 +91,11 @@ def get_model(image_size):
     x = get_preprocessing_pipeline(input)
     x = get_prediction_pipeline(x)
 
+    optimizer = keras.optimizers.Adam(lr=0.1)
+
     model = keras.models.Model(input=input, output=x)
-    model.compile(optimizer='adam', loss='mean_squared_error')
+    model.compile(optimizer=optimizer, loss='mean_squared_error')
+
     return model
 
 
@@ -152,6 +157,39 @@ def get_paths_angles_tuples(csv_path, minimum_angle):
     return path_angle_tuples
 
 
+def get_balanced_paths_angles_tuples(csv_path, minimum_angle, angle_step=0.05, angle_margin=0.2):
+
+    path_angle_tuples = get_paths_angles_tuples(csv_path, minimum_angle)
+
+    paths_angles_map = {path: angle for path, angle in path_angle_tuples}
+
+    balanced_path_angles_tuples = []
+
+    used_paths = set()
+    previous_used_paths = None
+
+    target_angle = minimum_angle
+
+    while used_paths != previous_used_paths:
+
+        previous_used_paths = used_paths.copy()
+
+        unused_paths = set(paths_angles_map.keys()).difference(used_paths)
+
+        for path in unused_paths:
+
+            steering_angle = paths_angles_map[path]
+
+            if target_angle - angle_margin <= abs(steering_angle) <= target_angle + angle_margin:
+
+                balanced_path_angles_tuples.append((path, steering_angle))
+                used_paths.add(path)
+
+                target_angle = target_angle + angle_step if target_angle < 1 else minimum_angle
+
+    return balanced_path_angles_tuples
+
+
 def get_shifted_image(image, max_shift):
     """
     Randomly shift image by up to max_shift pixels
@@ -176,6 +214,25 @@ def get_shifted_image(image, max_shift):
     return padded_image[y_start: y_end, x_start: x_end, :]
 
 
+def get_augmented_image(image):
+    """
+    Augment image with random rotations, shifts and brightness changes
+    :param image:
+    :return: augmented image
+    """
+
+    # Rotate randomly about origin
+    augmented_image = scipy.ndimage.rotate(image, angle=random.randint(-5, 5), reshape=False, mode='nearest')
+
+    # Shift by a random amount
+    augmented_image = get_shifted_image(augmented_image, max_shift=5)
+
+    # Change brightness by a random amount
+    augmented_image = np.clip(augmented_image.astype(np.float32) * random.uniform(0.7, 1.3), 0, 255)
+
+    return augmented_image.astype(np.uint8)
+
+
 def get_single_dataset_generator(csv_path, minimum_angle):
     """
     Return a generator that yields data from a single dataset. On yield return a single (image, steering angle)
@@ -185,7 +242,7 @@ def get_single_dataset_generator(csv_path, minimum_angle):
     :return: generator
     """
 
-    paths_angles_tuples = get_paths_angles_tuples(csv_path, minimum_angle)
+    paths_angles_tuples = get_balanced_paths_angles_tuples(csv_path, minimum_angle)
     parent_dir = os.path.dirname(csv_path)
 
     while True:
@@ -198,15 +255,7 @@ def get_single_dataset_generator(csv_path, minimum_angle):
             relative_path = parent_dir + "/IMG" + path.split("IMG")[1]
 
             image = cv2.imread(relative_path)
-
-            # Rotate randomly about origin
-            image = scipy.ndimage.rotate(image, angle=random.randint(-5, 5), reshape=False, mode='nearest')
-
-            # Shift by a random amount
-            image = get_shifted_image(image, max_shift=5)
-
-            # Change brightness by a random amount
-            image = np.clip(image.astype(np.float32) * random.uniform(0.7, 1.3), 0, 255)
+            image = get_augmented_image(image)
 
             # Flip randomly
             if random.randint(0, 1) == 1:
@@ -256,19 +305,19 @@ def train_model():
 
     paths = [
         "track_1_center/driving_log.csv",
-        "track_2_center/driving_log.csv",
+        # "track_2_center/driving_log.csv",
         "track_1_curves/driving_log.csv",
-        "track_2_curves/driving_log.csv",
+        # "track_2_curves/driving_log.csv",
         "track_1_recovery/driving_log.csv",
-        "track_2_recovery/driving_log.csv",
+        # "track_2_recovery/driving_log.csv",
     ]
 
     training_paths = [os.path.join(training_parent_dir, path) for path in paths]
     validation_paths = [os.path.join(validation_parent_dir, path) for path in paths]
 
     # Roughly corresponds to 0deg, 1.25deg and 10deg
-    angles = [0, 0, 0.05, 0.05, 0.4, 0.4]
-    # angles = [0, 0.05, 0.4]
+    # angles = [0, 0, 0.05, 0.05, 0.4, 0.4]
+    angles = [0, 0.05, 0.4]
 
     batch_size = 512
 
@@ -276,24 +325,29 @@ def train_model():
     validation_data_generator = get_multiple_datasets_generator(validation_paths, angles, batch_size=batch_size)
 
     training_samples_count = sum(
-        [len(get_paths_angles_tuples(path, minimum_angle)) for path, minimum_angle in zip(training_paths, angles)])
+        [len(get_balanced_paths_angles_tuples(
+            csv_path=path, minimum_angle=minimum_angle)) for path, minimum_angle in zip(training_paths, angles)])
 
     validation_samples_count = sum(
-        [len(get_paths_angles_tuples(path, minimum_angle)) for path, minimum_angle in zip(validation_paths, angles)])
+        [len(get_balanced_paths_angles_tuples(
+            csv_path=path, minimum_angle=minimum_angle)) for path, minimum_angle in zip(validation_paths, angles)])
 
-    callbacks = [keras.callbacks.ModelCheckpoint(filepath="./model.h5", verbose=1, save_best_only=True)]
+    callbacks = [
+        keras.callbacks.ModelCheckpoint(filepath="./model.h5", verbose=1, save_best_only=True),
+        keras.callbacks.ReduceLROnPlateau(patience=2, verbose=1)
+    ]
 
     model = get_model(image_size=(160, 320, 3))
     # model.load_weights("./model.h5")
 
     history_object = model.fit_generator(
-        training_data_generator, samples_per_epoch=training_samples_count, nb_epoch=20,
+        training_data_generator, samples_per_epoch=training_samples_count, nb_epoch=50,
         validation_data=validation_data_generator, nb_val_samples=validation_samples_count,
         callbacks=callbacks)
 
     import matplotlib
 
-    # Pyplot import fails with QXcbConnection otherwise...
+    # Pyplot import fails on AWS with QXcbConnection otherwise...
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
 
