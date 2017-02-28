@@ -104,7 +104,7 @@ def log_preprocessed_datasets_generator_output(logger):
 
 def check_angles_distribution():
 
-    parent_dir = "../../data/behavioral_cloning/2017_02_27/training/"
+    parent_dir = "../../data/behavioral_cloning/2017_02_27/validation/"
 
     paths = [
         "track_1_center/driving_log.csv",
@@ -117,7 +117,7 @@ def check_angles_distribution():
 
     paths = [os.path.join(parent_dir, path) for path in paths]
     angles = [0, 0, 0.05, 0.05, 0.4, 0.4]
-    # angles = [0.0]
+    # angles = [0.4]
 
     data_sets = [model.get_balanced_paths_angles_tuples(
         csv_path=path, minimum_angle=angle) for path, angle in zip(paths, angles)]

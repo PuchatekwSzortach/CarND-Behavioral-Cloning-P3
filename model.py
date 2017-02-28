@@ -47,6 +47,9 @@ def get_preprocessing_model(image_size):
 
 
 def get_prediction_pipeline(x):
+    """
+    Returns prediction pipeline
+    """
 
     x = keras.layers.BatchNormalization()(x)
     x = keras.layers.Convolution2D(nb_filter=24, nb_row=3, nb_col=3, activation='elu', border_mode='same')(x)
@@ -81,6 +84,9 @@ def get_prediction_pipeline(x):
 
 
 def get_model(image_size):
+    """
+    Get prediction model that given image batches as inputs returns steering angles as outputs
+    """
 
     expected_image_size = (160, 320, 3)
 
@@ -117,9 +123,10 @@ class VideoProcessor:
 def get_paths_angles_tuples(csv_path, minimum_angle):
     """
     Returns a list of (path, steering angle) tuples. Only paths to frames for which
-     absolute angles are at least minimum_angle are returned.
-    :param csv_path:
-    :param minimum_angle:
+     absolute angles are at least minimum_angle are returned. Center frames are always used,
+     left and right frames are used when car is steering to the right or to the left, respectively.
+    :param csv_path: path to csv file
+    :param minimum_angle: minimum angle frame must be associated with
     :return: (path, angle) tuples list
     """
 
@@ -130,11 +137,12 @@ def get_paths_angles_tuples(csv_path, minimum_angle):
 
     path_angle_tuples = []
 
+    # For each line
     for line in csv_lines:
 
         steering_angle = float(line[3])
 
-        # # Center image
+        # Center image
         if abs(steering_angle) >= minimum_angle:
 
             path_angle_tuples.append((line[0], steering_angle))
@@ -158,7 +166,18 @@ def get_paths_angles_tuples(csv_path, minimum_angle):
 
 
 def get_balanced_paths_angles_tuples(csv_path, minimum_angle, angle_step=0.05, angle_margin=0.2):
+    """
+    Given a csv_path and minimum angle, return (path, steering angle) tuples list such that
+    steering angles are balanced between the whole spectrum. Returned angles roughly follow
+     uniform distribution
+    :param csv_path: path to cvs file
+    :param minimum_angle: minimum angle required
+    :param angle_step: step at which angles are samples
+    :param angle_margin: margin within which steering angle has to be from target angle to be accepted
+    :return: (path, steering_angle) tuples list
+    """
 
+    # Get unbalanced path_angle tuples
     path_angle_tuples = get_paths_angles_tuples(csv_path, minimum_angle)
 
     paths_angles_map = {path: angle for path, angle in path_angle_tuples}
@@ -168,8 +187,10 @@ def get_balanced_paths_angles_tuples(csv_path, minimum_angle, angle_step=0.05, a
     used_paths = set()
     previous_used_paths = None
 
+    # Target angle will rotate between minimum_angle and 1 (or maximum)
     target_angle = minimum_angle
 
+    # Keep on going through paths until there are no new good images we can add
     while used_paths != previous_used_paths:
 
         previous_used_paths = used_paths.copy()
@@ -180,11 +201,13 @@ def get_balanced_paths_angles_tuples(csv_path, minimum_angle, angle_step=0.05, a
 
             steering_angle = paths_angles_map[path]
 
+            # Add path if angle is close enough to target angle
             if target_angle - angle_margin <= abs(steering_angle) <= target_angle + angle_margin:
 
                 balanced_path_angles_tuples.append((path, steering_angle))
                 used_paths.add(path)
 
+                # Increment target angle or set it back to minimum_angle
                 target_angle = target_angle + angle_step if target_angle < 1 else minimum_angle
 
     return balanced_path_angles_tuples
@@ -192,7 +215,7 @@ def get_balanced_paths_angles_tuples(csv_path, minimum_angle, angle_step=0.05, a
 
 def get_shifted_image(image, max_shift):
     """
-    Randomly shift image by up to max_shift pixels
+    Randomly shift image by up to max_shift pixels in both horizontal and vertial direction
     """
 
     vertical_shift = random.randint(-max_shift, max_shift)
@@ -236,7 +259,7 @@ def get_augmented_image(image):
 def get_single_dataset_generator(csv_path, minimum_angle):
     """
     Return a generator that yields data from a single dataset. On yield return a single (image, steering angle)
-    tuple. Image and steering angle are randomly flipped
+    tuple
     :param csv_path: path to drive log
     :param minimum_angle: minimum angle frame must have to be returned
     :return: generator
@@ -305,19 +328,19 @@ def train_model():
 
     paths = [
         "track_1_center/driving_log.csv",
-        # "track_2_center/driving_log.csv",
+        "track_2_center/driving_log.csv",
         "track_1_curves/driving_log.csv",
-        # "track_2_curves/driving_log.csv",
+        "track_2_curves/driving_log.csv",
         "track_1_recovery/driving_log.csv",
-        # "track_2_recovery/driving_log.csv",
+        "track_2_recovery/driving_log.csv",
     ]
 
     training_paths = [os.path.join(training_parent_dir, path) for path in paths]
     validation_paths = [os.path.join(validation_parent_dir, path) for path in paths]
 
     # Roughly corresponds to 0deg, 1.25deg and 10deg
-    # angles = [0, 0, 0.05, 0.05, 0.4, 0.4]
-    angles = [0, 0.05, 0.4]
+    angles = [0, 0, 0.05, 0.05, 0.4, 0.4]
+    # angles = [0, 0.05, 0.4]
 
     batch_size = 512
 
@@ -345,6 +368,7 @@ def train_model():
         validation_data=validation_data_generator, nb_val_samples=validation_samples_count,
         callbacks=callbacks)
 
+    # Bad practice to import inside function, but this is due to AWS behaving funny with matplotlib as noted below
     import matplotlib
 
     # Pyplot import fails on AWS with QXcbConnection otherwise...
