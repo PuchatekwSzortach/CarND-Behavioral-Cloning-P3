@@ -97,6 +97,7 @@ def get_model(image_size):
     x = get_preprocessing_pipeline(input)
     x = get_prediction_pipeline(x)
 
+    # Since we are using a lot of batch normalization, initial learning rate can be quite high
     optimizer = keras.optimizers.Adam(lr=0.1)
 
     model = keras.models.Model(input=input, output=x)

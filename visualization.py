@@ -141,9 +141,9 @@ def main():
 
     # log_single_generator_output(logger)
     # log_all_datasets_generator_output(logger)
-    # log_preprocessed_datasets_generator_output(logger)
+    log_preprocessed_datasets_generator_output(logger)
 
-    check_angles_distribution()
+    # check_angles_distribution()
 
 
 if __name__ == "__main__":
