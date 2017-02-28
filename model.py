@@ -327,7 +327,7 @@ def train_model():
     training_parent_dir = "../../data/behavioral_cloning/2017_02_27/training/"
     validation_parent_dir = "../../data/behavioral_cloning/2017_02_27/validation/"
 
-    paths = [
+    training_paths = [
         "track_1_center/driving_log.csv",
         "track_2_center/driving_log.csv",
         "track_1_curves/driving_log.csv",
@@ -336,8 +336,17 @@ def train_model():
         "track_2_recovery/driving_log.csv",
     ]
 
-    training_paths = [os.path.join(training_parent_dir, path) for path in paths]
-    validation_paths = [os.path.join(validation_parent_dir, path) for path in paths]
+    validation_paths = [
+        "track_1_center/driving_log.csv",
+        # "track_2_center/driving_log.csv",
+        "track_1_curves/driving_log.csv",
+        # "track_2_curves/driving_log.csv",
+        "track_1_recovery/driving_log.csv",
+        # "track_2_recovery/driving_log.csv",
+    ]
+
+    training_paths = [os.path.join(training_parent_dir, path) for path in training_paths]
+    validation_paths = [os.path.join(validation_parent_dir, path) for path in validation_paths]
 
     # Roughly corresponds to 0deg, 1.25deg and 10deg
     angles = [0, 0, 0.05, 0.05, 0.4, 0.4]
